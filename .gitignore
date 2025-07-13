@@ -1,3 +1,5 @@
 /Makefile
 /objs/
 /tmp/
+/logs/
+/zig-out/

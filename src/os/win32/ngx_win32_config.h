@@ -11,7 +11,9 @@
 
 #undef  WIN32
 #define WIN32         0x0400
+#ifndef _WIN32_WINNT
 #define _WIN32_WINNT  0x0501
+#endif
 
 
 #define STRICT
