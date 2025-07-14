@@ -184,6 +184,10 @@
 // #endif
 
 
-// #ifndef NGX_ZLIB
-// #define NGX_ZLIB  1
-// #endif
+#ifndef NGX_ZLIB
+#define NGX_ZLIB  1
+#endif
+
+#ifndef NGX_HTTP_GZIP
+#define NGX_HTTP_GZIP  1
+#endif

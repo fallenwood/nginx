@@ -1,3 +1,6 @@
 [submodule "vendor/pcre2"]
 	path = vendor/pcre2
 	url = https://github.com/PCRE2Project/pcre2
+[submodule "vendor/zlib"]
+	path = vendor/zlib
+	url = https://github.com/madler/zlib

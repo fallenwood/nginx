@@ -110,18 +110,60 @@ fn buildPcre2(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.bui
     return lib;
 }
 
+fn buildZlib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) !*Compile {
+    const lib_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    lib_mod.addCMacro("HAVE_HIDDEN", "");
+    lib_mod.addCMacro("_LARGEFILE64_SOURCE", "1");
+
+    const lib = b.addLibrary(.{
+        .name = b.fmt("libz", .{}),
+        .root_module = lib_mod,
+        .linkage = .static,
+    });
+
+    lib.addIncludePath(b.path("vendor/zlib"));
+
+    lib.addCSourceFiles(.{
+        .files = &.{
+            "vendor/zlib/crc32.c",
+            "vendor/zlib/adler32.c",
+            "vendor/zlib/infback.c",
+            "vendor/zlib/inffast.c",
+            "vendor/zlib/inflate.c",
+            "vendor/zlib/trees.c",
+            "vendor/zlib/deflate.c",
+            "vendor/zlib/inftrees.c",
+            "vendor/zlib/zutil.c",
+            "vendor/zlib/compress.c",
+            "vendor/zlib/uncompr.c",
+            "vendor/zlib/gzclose.c",
+            "vendor/zlib/gzlib.c",
+            "vendor/zlib/gzread.c",
+            "vendor/zlib/gzwrite.c",
+        },
+    });
+
+    return lib;
+}
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const pcre2 = try buildPcre2(b, target, optimize);
+    const zlib = try buildZlib(b, target, optimize);
 
     const nginx_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
     });
 
-    const flags = [_][]const u8{ "-std=gnu11", "-DZIG_BUILD", "-D_GNU_SOURCE", "-DFD_SETSIZE=1024", "-Isrc/core", "-Isrc/http", "-Isrc/http/modules", "-Isrc/event", "-Isrc/event/modules", "-Isrc/event/quic", "-Izig/win32", "-Isrc/os/win32", "-Ivendor/pcre2/src" };
+    const flags = [_][]const u8{ "-std=gnu11", "-DZIG_BUILD", "-D_GNU_SOURCE", "-DFD_SETSIZE=1024", "-Isrc/core", "-Isrc/http", "-Isrc/http/modules", "-Isrc/event", "-Isrc/event/modules", "-Isrc/event/quic", "-Izig/win32", "-Isrc/os/win32", "-Ivendor/pcre2/src", "-Ivendor/zlib" };
 
     const nginx_sources_common = [_][]const u8{
         "src/core/nginx.c",
@@ -180,6 +222,7 @@ pub fn build(b: *std.Build) !void {
         "src/http/modules/ngx_http_empty_gif_module.c",
         "src/http/modules/ngx_http_fastcgi_module.c",
         "src/http/modules/ngx_http_geo_module.c",
+        "src/http/modules/ngx_http_gzip_filter_module.c",
         "src/http/modules/ngx_http_headers_filter_module.c",
         "src/http/modules/ngx_http_index_module.c",
         "src/http/modules/ngx_http_limit_conn_module.c",
@@ -252,6 +295,8 @@ pub fn build(b: *std.Build) !void {
         .flags = &flags,
     });
     nginx_mod.addCMacro("PCRE2_STATIC", "");
+    nginx_mod.addCMacro("HAVE_HIDDEN", "");
+    nginx_mod.addCMacro("_LARGEFILE64_SOURCE", "1");
 
     const exe = b.addExecutable(.{
         .linkage = .dynamic,
@@ -260,12 +305,15 @@ pub fn build(b: *std.Build) !void {
     });
 
     exe.step.dependOn(&pcre2.step);
+    exe.step.dependOn(&zlib.step);
 
     exe.linkLibC();
     exe.linkSystemLibrary("ws2_32");
     exe.linkLibrary(pcre2);
+    exe.linkLibrary(zlib);
 
     b.installArtifact(pcre2);
+    b.installArtifact(zlib);
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
