@@ -149,3 +149,41 @@
 #define NGX_GROUP  ""
 #endif
 
+
+#ifndef NGX_PCRE
+#define NGX_PCRE  1
+#endif
+
+
+#ifndef NGX_PCRE2
+#define NGX_PCRE2  1
+#endif
+
+
+// #ifndef NGX_HTTP_SSL
+// #define NGX_HTTP_SSL  1
+// #endif
+
+// #ifndef NGX_OPENSSL
+// #define NGX_OPENSSL  1
+// #endif
+
+
+// #ifndef NGX_SSL
+// #define NGX_SSL  1
+// #endif
+
+
+// #ifndef NGX_OPENSSL_NO_CONFIG
+// #define NGX_OPENSSL_NO_CONFIG  1
+// #endif
+
+
+// #ifndef NGX_HAVE_CRYPT
+// #define NGX_HAVE_CRYPT  1
+// #endif
+
+
+// #ifndef NGX_ZLIB
+// #define NGX_ZLIB  1
+// #endif

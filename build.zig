@@ -1,28 +1,127 @@
 const std = @import("std");
 
+const Compile = std.Build.Step.Compile;
+
+const CodeUnitWidth = enum {
+    @"8",
+    @"16",
+    @"32",
+};
+
+fn buildPcre2(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) !*Compile {
+    const codeUnitWidth: CodeUnitWidth = .@"8";
+    const pcre2_header_dir = b.addWriteFiles();
+    const pcre2_header = pcre2_header_dir.addCopyFile(b.path("vendor/pcre2/src/pcre2.h.generic"), "pcre2.h");
+
+    const config_header = b.addConfigHeader(
+        .{
+            .style = .{ .cmake = b.path("vendor/pcre2/src/config-cmake.h.in") },
+            .include_path = "config.h",
+        },
+        .{
+            .HAVE_ASSERT_H = true,
+            .HAVE_UNISTD_H = (target.result.os.tag != .windows),
+            .HAVE_WINDOWS_H = (target.result.os.tag == .windows),
+
+            .HAVE_MEMMOVE = true,
+            .HAVE_STRERROR = true,
+
+            .SUPPORT_PCRE2_8 = codeUnitWidth == CodeUnitWidth.@"8",
+            .SUPPORT_PCRE2_16 = codeUnitWidth == CodeUnitWidth.@"16",
+            .SUPPORT_PCRE2_32 = codeUnitWidth == CodeUnitWidth.@"32",
+            .SUPPORT_UNICODE = true,
+
+            .PCRE2_EXPORT = null,
+            .PCRE2_LINK_SIZE = 2,
+            .PCRE2_HEAP_LIMIT = 20000000,
+            .PCRE2_MATCH_LIMIT = 10000000,
+            .PCRE2_MATCH_LIMIT_DEPTH = "MATCH_LIMIT",
+            .PCRE2_MAX_VARLOOKBEHIND = 255,
+            .NEWLINE_DEFAULT = 2,
+            .PCRE2_PARENS_NEST_LIMIT = 250,
+            .PCRE2GREP_BUFSIZE = 20480,
+            .PCRE2GREP_MAX_BUFSIZE = 1048576,
+        },
+    );
+
+    // pcre2-8/16/32.lib
+
+    const lib_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+
+    lib_mod.addCMacro("HAVE_CONFIG_H", "");
+    lib_mod.addCMacro("PCRE2_CODE_UNIT_WIDTH", @tagName(codeUnitWidth));
+    lib_mod.addCMacro("PCRE2_STATIC", "");
+
+    const lib = b.addLibrary(.{
+        .name = b.fmt("pcre2-{s}", .{@tagName(codeUnitWidth)}),
+        .root_module = lib_mod,
+        .linkage = .static,
+    });
+
+    lib.addConfigHeader(config_header);
+    lib.addIncludePath(pcre2_header_dir.getDirectory());
+    lib.addIncludePath(b.path("vendor/pcre2/src"));
+
+    lib.addCSourceFile(.{
+        .file = b.addWriteFiles().addCopyFile(b.path("vendor/pcre2/src/pcre2_chartables.c.dist"), "pcre2_chartables.c"),
+    });
+
+    lib.addCSourceFiles(.{
+        .files = &.{
+            "vendor/pcre2/src/pcre2_auto_possess.c",
+            "vendor/pcre2/src/pcre2_chkdint.c",
+            "vendor/pcre2/src/pcre2_compile.c",
+            "vendor/pcre2/src/pcre2_compile_cgroup.c",
+            "vendor/pcre2/src/pcre2_compile_class.c",
+            "vendor/pcre2/src/pcre2_config.c",
+            "vendor/pcre2/src/pcre2_context.c",
+            "vendor/pcre2/src/pcre2_convert.c",
+            "vendor/pcre2/src/pcre2_dfa_match.c",
+            "vendor/pcre2/src/pcre2_error.c",
+            "vendor/pcre2/src/pcre2_extuni.c",
+            "vendor/pcre2/src/pcre2_find_bracket.c",
+            "vendor/pcre2/src/pcre2_jit_compile.c",
+            "vendor/pcre2/src/pcre2_maketables.c",
+            "vendor/pcre2/src/pcre2_match.c",
+            "vendor/pcre2/src/pcre2_match_data.c",
+            "vendor/pcre2/src/pcre2_match_next.c",
+            "vendor/pcre2/src/pcre2_newline.c",
+            "vendor/pcre2/src/pcre2_ord2utf.c",
+            "vendor/pcre2/src/pcre2_pattern_info.c",
+            "vendor/pcre2/src/pcre2_script_run.c",
+            "vendor/pcre2/src/pcre2_serialize.c",
+            "vendor/pcre2/src/pcre2_string_utils.c",
+            "vendor/pcre2/src/pcre2_study.c",
+            "vendor/pcre2/src/pcre2_substitute.c",
+            "vendor/pcre2/src/pcre2_substring.c",
+            "vendor/pcre2/src/pcre2_tables.c",
+            "vendor/pcre2/src/pcre2_ucd.c",
+            "vendor/pcre2/src/pcre2_valid_utf.c",
+            "vendor/pcre2/src/pcre2_xclass.c",
+        },
+    });
+
+    lib.installHeader(pcre2_header, "pcre2.h");
+
+    return lib;
+}
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const pcre2 = try buildPcre2(b, target, optimize);
 
     const nginx_mod = b.createModule(.{
         .target = target,
         .optimize = optimize,
     });
 
-    const flags = [_][]const u8{
-        "-std=gnu11",
-        "-DZIG_BUILD",
-        "-D_GNU_SOURCE",
-        "-DFD_SETSIZE=1024",
-        "-Isrc/core",
-        "-Isrc/http",
-        "-Isrc/http/modules",
-        "-Isrc/event",
-        "-Isrc/event/modules",
-        "-Isrc/event/quic",
-        "-Izig/win32",
-        "-Isrc/os/win32",
-    };
+    const flags = [_][]const u8{ "-std=gnu11", "-DZIG_BUILD", "-D_GNU_SOURCE", "-DFD_SETSIZE=1024", "-Isrc/core", "-Isrc/http", "-Isrc/http/modules", "-Isrc/event", "-Isrc/event/modules", "-Isrc/event/quic", "-Izig/win32", "-Isrc/os/win32", "-Ivendor/pcre2/src" };
 
     const nginx_sources_common = [_][]const u8{
         "src/core/nginx.c",
@@ -51,6 +150,7 @@ pub fn build(b: *std.Build) !void {
         "src/core/ngx_queue.c",
         "src/core/ngx_radix_tree.c",
         "src/core/ngx_rbtree.c",
+        "src/core/ngx_regex.c",
         "src/core/ngx_resolver.c",
         "src/core/ngx_rwlock.c",
         "src/core/ngx_sha1.c",
@@ -91,6 +191,7 @@ pub fn build(b: *std.Build) !void {
         "src/http/modules/ngx_http_not_modified_filter_module.c",
         "src/http/modules/ngx_http_proxy_module.c",
         "src/http/modules/ngx_http_range_filter_module.c",
+        "src/http/modules/ngx_http_rewrite_module.c",
         "src/http/modules/ngx_http_referer_module.c",
         "src/http/modules/ngx_http_scgi_module.c",
         "src/http/modules/ngx_http_split_clients_module.c",
@@ -150,12 +251,7 @@ pub fn build(b: *std.Build) !void {
         .files = sources,
         .flags = &flags,
     });
-    // nginx_mod.addIncludePath(b.path("src/core"));
-    // nginx_mod.addIncludePath(b.path("src/event"));
-    // nginx_mod.addIncludePath(b.path("src/event/modules"));
-    // nginx_mod.addIncludePath(b.path("src/event/quic"));
-    // nginx_mod.addIncludePath(b.path("zig/win32"));
-    // nginx_mod.addIncludePath(b.path("src/os/win32"));
+    nginx_mod.addCMacro("PCRE2_STATIC", "");
 
     const exe = b.addExecutable(.{
         .linkage = .dynamic,
@@ -163,9 +259,13 @@ pub fn build(b: *std.Build) !void {
         .root_module = nginx_mod,
     });
 
+    exe.step.dependOn(&pcre2.step);
+
     exe.linkLibC();
     exe.linkSystemLibrary("ws2_32");
+    exe.linkLibrary(pcre2);
 
+    b.installArtifact(pcre2);
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
