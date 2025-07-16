@@ -4,3 +4,6 @@
 [submodule "vendor/zlib"]
 	path = vendor/zlib
 	url = https://github.com/madler/zlib
+[submodule "vendor/openssl-zig"]
+	path = vendor/openssl-zig
+	url = https://github.com/kassane/openssl-zig
