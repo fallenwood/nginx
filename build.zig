@@ -154,7 +154,7 @@ fn buildZlib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    
+
     // Build openssl
     const crypto = libcrypto(b, target, optimize);
     const ssl = libssl(b, target, optimize);
@@ -166,6 +166,7 @@ pub fn build(b: *std.Build) !void {
 
     b.installArtifact(crypto);
     b.installArtifact(ssl);
+    // End build openssl
 
     const pcre2 = try buildPcre2(b, target, optimize);
     const zlib = try buildZlib(b, target, optimize);
@@ -175,7 +176,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
 
-    const flags = [_][]const u8{ "-std=gnu11", "-DZIG_BUILD", "-D_GNU_SOURCE", "-DFD_SETSIZE=1024", "-Isrc/core", "-Isrc/http", "-Isrc/http/modules", "-Isrc/event", "-Isrc/event/modules", "-Isrc/event/quic", "-Izig/win32", "-Isrc/os/win32", "-Ivendor/pcre2/src", "-Ivendor/zlib" };
+    const flags = [_][]const u8{ "-std=gnu11", "-DZIG_BUILD", "-D_GNU_SOURCE" };
 
     const nginx_sources_common = [_][]const u8{
         "src/core/nginx.c",
@@ -220,6 +221,9 @@ pub fn build(b: *std.Build) !void {
         "src/event/ngx_event_accept.c",
         "src/event/ngx_event_acceptex.c",
         "src/event/ngx_event_connect.c",
+        "src/event/ngx_event_openssl.c",
+        "src/event/ngx_event_openssl_cache.c",
+        "src/event/ngx_event_openssl_stapling.c",
         "src/event/ngx_event_pipe.c",
         "src/event/ngx_event_posted.c",
         "src/event/ngx_event_timer.c",
@@ -306,6 +310,36 @@ pub fn build(b: *std.Build) !void {
         .files = sources,
         .flags = &flags,
     });
+
+    nginx_mod.addIncludePath(b.path("src/core"));
+    nginx_mod.addIncludePath(b.path("src/http"));
+    nginx_mod.addIncludePath(b.path("src/http/modules"));
+    nginx_mod.addIncludePath(b.path("src/event"));
+    nginx_mod.addIncludePath(b.path("src/event/modules"));
+    nginx_mod.addIncludePath(b.path("zig/win32"));
+    nginx_mod.addIncludePath(b.path("src/os/win32"));
+    nginx_mod.addIncludePath(b.path("vendor/pcre2/src"));
+    nginx_mod.addIncludePath(b.path("vendor/zlib"));
+
+    // This is bad
+    nginx_mod.addIncludePath(b.path("zig-out/include"));
+
+    // ssl.installHeadersDirectory(b.path("vendor/openssl-zig/include/openssl"), "openssl", .{});
+    // b.getInstallPath(dir: InstallDir, dest_rel_path: []const u8)
+    // const sslHeaders = ssl.installed_headers;
+    // for (sslHeaders.items) |installation| {
+    //     // header.directory
+    //     switch (installation) {
+    //         .file => |f| nginx_mod.addConfigHeader(f),
+    //         .directory => |d| {
+    //             nginx_mod.addIncludePath(d);
+    //         },
+    //     }
+    // }
+
+    // nginx_mod.addCMacro("OPENSSL_API_COMPAT", "30500");
+    // nginx_mod.addCMacro("OPENSSL_NO_DEPRECATED", "");
+    nginx_mod.addCMacro("FD_SETSIZE", "1024");
     nginx_mod.addCMacro("PCRE2_STATIC", "");
     nginx_mod.addCMacro("HAVE_HIDDEN", "");
     nginx_mod.addCMacro("_LARGEFILE64_SOURCE", "1");
@@ -326,7 +360,7 @@ pub fn build(b: *std.Build) !void {
     exe.linkLibrary(pcre2);
     exe.linkLibrary(zlib);
     exe.linkLibrary(crypto);
-    // exe.linkLibrary(ssl);
+    exe.linkLibrary(ssl);
 
     b.installArtifact(pcre2);
     b.installArtifact(zlib);
@@ -371,7 +405,7 @@ fn libcrypto(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     lib.root_module.addCMacro("OPENSSL_NO_KTLS", "");
     lib.root_module.addCMacro("OPENSSL_NO_QUIC", "");
     lib.root_module.addCMacro("OPENSSL_NO_THREAD_POOL", "");
-    lib.root_module.addCMacro("OPENSSL_NO_STDIO", "");
+    // lib.root_module.addCMacro("OPENSSL_NO_STDIO", "");
     lib.root_module.addCMacro("OPENSSL_NO_JITTER", "");
     lib.root_module.addCMacro("OPENSSLDIR", "\"/usr/local/ssl\"");
     lib.root_module.addCMacro("OSSL_PKEY_PARAM_RSA_DERIVE_FROM_PQ", "1");
@@ -1108,7 +1142,7 @@ fn libcrypto(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
                 "vendor/openssl-zig/crypto/thread/arch/thread_win.c"
             else
                 "vendor/openssl-zig/crypto/thread/arch/thread_posix.c",
-            // "crypto/thread/internal.c",
+            "vendor/openssl-zig/crypto/thread/internal.c",
             "vendor/openssl-zig/crypto/threads_lib.c",
             "vendor/openssl-zig/crypto/threads_none.c",
             if (lib.rootModuleTarget().os.tag == .windows)
@@ -1304,7 +1338,7 @@ fn libssl(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin
             "vendor/openssl-zig/ssl/ssl_conf.c",
             "vendor/openssl-zig/ssl/ssl_err_legacy.c",
             "vendor/openssl-zig/ssl/ssl_init.c",
-            // "ssl/ssl_lib.c",
+            "vendor/openssl-zig/ssl/ssl_lib.c",
             "vendor/openssl-zig/ssl/ssl_mcnf.c",
             "vendor/openssl-zig/ssl/ssl_rsa.c",
             // "ssl/ssl_rsa_legacy.c",
